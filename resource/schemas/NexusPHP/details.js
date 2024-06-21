@@ -1,4 +1,4 @@
-(function ($, window) {
+(function($, window) {
   console.log("this is details.js");
   class App extends window.NexusPHPCommon {
     init() {
@@ -11,71 +11,72 @@
      */
     initButtons() {
       this.initDetailButtons();
-
-      let sayThanksButton = $("input#saythanks:not(:disabled)");
-      if (sayThanksButton.length) {
-        // 说谢谢
-        PTService.addButton({
-          title: "对当前种子说谢谢",
-          icon: "thumb_up",
-          label: "感谢发布者",
-          key: "sayThanks",
-          click: (success, error) => {
-            sayThanksButton.click();
-            success();
-            setTimeout(() => {
-              PTService.removeButton("sayThanks")
-            }, 1000)
-          }
-        });
-      }
     }
+
+    /**
+     * 通过尝试分析 href 获取真正下载链接
+     */
+
+    _getDownloadUrlByPossibleHrefs() {
+      const possibleHrefs = [
+        // pthome
+        "a[href*='downhash'][href*='https'][class!='forward_a']",
+        // hdchina
+        "a[href*='hash'][href*='https'][class!='forward_a']",
+        // misc
+        "a[href*='passkey'][href*='https'][class!='forward_a']",
+        "a[href*='passkey'][class!='forward_a']"
+      ];
+
+      for (const href of possibleHrefs) {
+        const query = $(href);
+        if (query.length) {
+          return query.attr("href");
+        }
+      }
+      return null;
+    }
+
 
     /**
      * 获取下载链接
      */
     getDownloadURL() {
-      let query = $("a[href*='passkey'][href*='https']");
-      let url = "";
-      if (query.length > 0) {
-        url = query.attr("href");
-      } else {
-        query = $("a[href*='passkey']");
-        if (query.length > 0) {
-          url = query.attr("href");
+      let url = PTService.getFieldValue("downloadURL");
+      if (!url) {
+
+        url = this._getDownloadUrlByPossibleHrefs();
+
+        if (!url) {
+          url =
+            $("td.rowfollow:contains('&passkey='):last").text() ||
+            $("a[href*='download'][href*='?id']:first").attr("href") ||
+            $("a[href*='download.php?']:first").attr("href");
+        }
+
+        // 如果链接地址中不包含passkey，且站点已配置 passkey 信息
+        // 则尝试 passkey 来生成下载链接
+        if (!(url + "").getQueryString("passkey") && PTService.site.passkey) {
+          let id = location.href.getQueryString("id");
+          if (id) {
+            // 如果站点没有配置禁用https，则默认添加https链接
+            return (
+              location.origin +
+              "/download.php?id=" +
+              id +
+              "&passkey=" +
+              PTService.site.passkey +
+              (PTService.site.disableHttps ? "" : "&https=1")
+            );
+          }
+        }
+
+        if (!url) {
+          return "";
         }
       }
 
-      if (!url) {
-        url = $("a[href*='download'][href*='?id']:first").attr("href") || $("a[href*='download.php?']:first").attr("href");
-      }
-
-      // 如果还是没有获取到下载链接地址，则尝试 passkey 来生成下载链接
-      if (!url && PTService.site.passkey) {
-        let id = location.href.getQueryString("id");
-        if (id) {
-          // 如果站点没有配置禁用https，则默认添加https链接
-          return location.origin + "/download.php?id=" + id + "&passkey=" + PTService.site.passkey + (PTService.site.disableHttps ? "" : "&https=1");
-        }
-      }
-
-      if (!url) {
-        return "";
-      }
-
-      if (url.substr(0, 2) === '//') { // 首先尝试适配HUDBT、WHU这样以相对链接开头
-        url = `${location.protocol}${url}`;
-      } else if (url.substr(0, 1) === "/") {
-        url = `${location.origin}${url}`;
-      } else if (url.substr(0, 4) !== "http") {
-        url = `${location.origin}/${url}`;
-      }
-
-      if (url.indexOf("https=1") === -1) {
-        url += "&https=1"
-      }
-
-      return url;
+      return this.getFullURL(url);
     }
 
     /**
@@ -89,6 +90,31 @@
       }
       return title;
     }
-  };
-  (new App()).init();
+    
+    /**
+     * 获取当前种子IMDb Id
+     */
+    getIMDbId() {
+      try
+      {
+        let imdbId = PTService.getFieldValue("imdbId");
+        console.log(imdbId);
+        if (imdbId)
+          return imdbId;
+        else {
+          const link = $("a[href*='www.imdb.com/title/']:first");
+          if (link.length > 0) {
+            let match = link.attr("href").match(/(tt\d+)/);
+
+            if (match && match.length >= 2)
+              return imdbId = match[1];
+
+          }
+        }
+      } catch {
+      }
+      return null;
+    }
+  }
+  new App().init();
 })(jQuery, window);

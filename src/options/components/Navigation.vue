@@ -1,23 +1,27 @@
 <template>
   <!-- 导航栏 -->
-  <v-navigation-drawer clipped fixed v-model="drawer" app>
-    <v-list v-for="(group,index) in navs" :key="index" dense>
-      <v-subheader v-if="group.title" class="grey--text text--darken-1">{{group.title}}</v-subheader>
-      <v-list-tile
-        :to="item.key"
-        v-for="(item, index) in group.items"
-        :key="index"
-        :href="item.url"
-        :target="item.url?'_blank':''"
-        rel="noopener noreferrer nofollow"
-      >
-        <v-list-tile-action class="ml-3">
-          <v-icon>{{item.icon}}</v-icon>
-        </v-list-tile-action>
-        <v-list-tile-content>
-          <v-list-tile-title>{{item.title}}</v-list-tile-title>
-        </v-list-tile-content>
-      </v-list-tile>
+  <v-navigation-drawer clipped fixed v-model="drawer" app width="220">
+    <v-list v-for="(group, index) in navs" :key="index" dense>
+      <v-subheader v-if="group.title" class="grey--text text--darken-1">{{
+        $t(group.title)
+      }}</v-subheader>
+      <template v-for="(item, index) in group.items">
+        <v-list-tile
+          v-if="item.visible !== false"
+          :to="item.key"
+          :key="index"
+          :href="item.url"
+          :target="item.url ? '_blank' : ''"
+          rel="noopener noreferrer nofollow"
+        >
+          <v-list-tile-action style="min-width: 42px;margin-left: 13px;">
+            <v-icon>{{ item.icon }}</v-icon>
+          </v-list-tile-action>
+          <v-list-tile-content>
+            <v-list-tile-title>{{ $t(item.title) }}</v-list-tile-title>
+          </v-list-tile-content>
+        </v-list-tile>
+      </template>
     </v-list>
   </v-navigation-drawer>
 </template>
@@ -27,126 +31,121 @@ export default Vue.extend({
   props: {
     value: Boolean
   },
+  data() {
+    return {
+      drawer: this.$store.state.options.navBarIsOpen
+    };
+  },
   model: {
     prop: "value",
     event: "change"
   },
   watch: {
     drawer() {
-      this.$emit("change", this.drawer);
+      (this as any).$emit("change", this.drawer);
     },
     value() {
       this.drawer = this.value;
     }
   },
-  data() {
-    return {
-      drawer: this.$store.state.options.navBarIsOpen,
-      navs: [
+  computed: {
+    navs() {
+      return [
         {
-          title: "概览",
+          title: "navigation.dashboard.title",
           key: "group-",
           items: [
             {
-              title: "概览",
+              title: "navigation.dashboard.userData",
               icon: "dashboard",
               key: "/home"
             },
             {
-              title: "搜索结果",
+              title: "navigation.dashboard.searchResults",
               icon: "search",
               key: "/search-torrent"
             },
             {
-              title: "下载历史",
+              title: "navigation.dashboard.searchResultSnapshot",
+              icon: "add_a_photo",
+              key: "/search-result-snapshot",
+              visible: (this.$store as any).state.options.allowSaveSnapshot
+            },
+            {
+              title: "navigation.dashboard.history",
               icon: "history",
-              key: "/history"
+              key: "/history",
+              visible: (this.$store as any).state.options.saveDownloadHistory
+            },
+            {
+              title: "navigation.dashboard.collection",
+              icon: "favorite",
+              key: "/collection"
+            },
+            {
+              title: "navigation.dashboard.keepUploadTask",
+              icon: "merge_type",
+              key: "/keep-upload-task"
             }
           ]
         },
         {
-          title: "参数设置",
+          title: "navigation.settings.title",
           items: [
             {
-              title: "常规设置",
-              icon: "settings",
-              key: "/set-base"
-            },
-            // {
-            //   title: "已支持的站点架构",
-            //   icon: "ballot",
-            //   key: "set-support-schema"
-            // },
-            {
-              title: "站点设置",
-              icon: "public",
-              key: "/set-sites"
-            },
-            {
-              title: "下载服务器",
+              title: "navigation.settings.downloadClients",
               icon: "cloud_download",
               key: "/set-download-clients"
             },
             {
-              title: "下载目录设置",
+              title: "navigation.settings.base",
+              icon: "settings",
+              key: "/set-base"
+            },
+            {
+              title: "navigation.settings.sites",
+              icon: "public",
+              key: "/set-sites"
+            },
+            {
+              title: "navigation.settings.downloadPaths",
               icon: "folder_open",
               key: "/set-download-paths"
             },
             {
-              title: "搜索方案",
+              title: "navigation.settings.searchSolution",
               icon: "widgets",
               key: "/set-search-solution"
             },
             {
-              title: "参数备份与恢复",
+              title: "navigation.settings.backup",
               icon: "restore",
               key: "/set-backup"
             },
             {
-              title: "权限设置",
+              title: "navigation.settings.permissions",
               icon: "verified_user",
-              key: "set-permissions"
+              key: "/set-permissions"
             }
-            // {
-            //   title: "语言",
-            //   icon: "language",
-            //   key: "/set-language"
-            // }
           ]
         },
         {
-          title: "鸣谢",
+          title: "navigation.thanks.title",
           items: [
             {
-              title: "项目参考与引用",
+              title: "navigation.thanks.reference",
               icon: "developer_board",
               key: "/technology-stack"
             },
             {
-              title: "特别感谢",
+              title: "navigation.thanks.specialThanksTo",
               icon: "people",
               key: "/dev-team"
             }
           ]
-        },
-        {
-          title: "支持本项目",
-          items: [
-            {
-              title: "Bug反馈",
-              icon: "bug_report",
-              key: "",
-              url: "https://github.com/ronggang/PT-Plugin-Plus/issues"
-            },
-            {
-              title: "捐助",
-              icon: "favorite",
-              key: "/donate"
-            }
-          ]
         }
-      ]
-    };
+      ];
+    }
   }
 });
 </script>

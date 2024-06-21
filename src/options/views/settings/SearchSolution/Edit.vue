@@ -1,10 +1,13 @@
 <template>
   <v-dialog v-model="show" fullscreen>
     <v-card>
-      <v-card-title class="headline blue-grey darken-2" style="color:white">{{ words.title }}</v-card-title>
+      <v-card-title
+        class="headline blue-grey darken-2"
+        style="color:white"
+      >{{ $t("settings.searchSolution.edit.title") }}</v-card-title>
 
       <v-card-text class="body">
-        <Editor :option="defaultItem" :initSites="sites" @change="change"/>
+        <Editor :option="defaultItem" :initSites="sites" @change="change" />
       </v-card-text>
 
       <v-divider></v-divider>
@@ -13,11 +16,11 @@
         <v-spacer></v-spacer>
         <v-btn flat color="error" @click="cancel">
           <v-icon>cancel</v-icon>
-          <span class="ml-1">{{ words.cancel }}</span>
+          <span class="ml-1">{{ $t("common.cancel") }}</span>
         </v-btn>
         <v-btn flat color="success" @click="save" :disabled="!valid">
           <v-icon>check_circle_outline</v-icon>
-          <span class="ml-1">{{ words.ok }}</span>
+          <span class="ml-1">{{ $t("common.ok") }}</span>
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -32,17 +35,13 @@ import {
   SearchSolutionRange,
   SearchEntry
 } from "@/interface/common";
+import { PPF } from "@/service/public";
 export default Vue.extend({
   components: {
     Editor
   },
   data() {
     return {
-      words: {
-        title: "搜索方案定义",
-        ok: "确认",
-        cancel: "取消"
-      },
       show: false,
       valid: false,
       sites: [] as Site[],
@@ -94,7 +93,7 @@ export default Vue.extend({
       this.valid = !!value.name;
     },
     resetSites() {
-      let sites: Site[] = Object.assign([], this.$store.state.options.sites);
+      let sites: Site[] = PPF.clone(this.$store.state.options.sites);
       // this.sites = JSON.parse(JSON.stringify(options.sites)) as Site[];
       this.sites = [];
       sites.forEach((item: Site) => {

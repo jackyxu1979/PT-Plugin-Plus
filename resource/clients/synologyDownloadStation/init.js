@@ -1,5 +1,6 @@
 /**
  * @see https://global.download.synology.com/download/Document/DeveloperGuide/Synology_Download_Station_Web_API.pdf
+ * @backport https://github.com/pt-plugins/PT-Plugin-Plus/blob/48c2d42a1d05c129c0abbbecf653b1b7d88a8a8e/src/resource/btClients/src/clients/synologyDownloadStation.ts
  */
 (function ($, window) {
   class Client {
@@ -7,7 +8,7 @@
     init(options) {
       this.options = options;
       this.sessionId = "";
-      this.version = 2;
+      this.synoToken = "";
       if (this.options.address.substr(-1) == "/") {
         this.options.address = this.options.address.substr(0, this.options.address.length - 1);
       }
@@ -16,23 +17,24 @@
     /**
      * 获取 SID
      */
+    // FIXME 这个方法已经不止获取SID了，CSRFToken也是在此获得，该考虑换个名字了
     getSessionId() {
       return new Promise((resolve, reject) => {
-        let url = `${this.options.address}/webapi/auth.cgi?api=SYNO.API.Auth&version=${this.version}&method=login&account=${encodeURIComponent(this.options.loginName)}&passwd=${encodeURIComponent(this.options.loginPwd)}&session=DownloadStation&format=sid`;
+        let url = `${this.options.address}/webapi/auth.cgi?api=SYNO.API.Auth&version=3&method=login&account=${encodeURIComponent(this.options.loginName)}&passwd=${encodeURIComponent(this.options.loginPwd)}&session=DownloadStation&format=sid&enable_syno_token=yes`;
         $.ajax({
           url,
           timeout: PTBackgroundService.options.connectClientTimeout,
           dataType: "json"
         }).done((result) => {
-          console.log(result)
           if (result && result.success) {
             this.sessionId = result.data.sid;
+            this.synoToken = result.data.synotoken
             resolve(this.sessionId)
           } else {
             reject({
               status: "error",
               code: result.error.code,
-              msg: "身份验证失败"
+              msg: i18n.t("downloadClient.permissionDenied") //"身份验证失败"
             })
           }
           /**
@@ -69,7 +71,7 @@
             });
             break;
 
-            // 测试是否可连接
+          // 测试是否可连接
           case "testClientConnectivity":
             this.getSessionId().then(result => {
               resolve(result != "");
@@ -83,8 +85,8 @@
 
     /**
      * 添加种子链接
-     * @param {*} options 
-     * @param {*} callback 
+     * @param {*} options
+     * @param {*} callback
      */
     addTorrentFromUrl(options, callback) {
       if (!this.sessionId) {
@@ -94,7 +96,7 @@
           } else {
             callback({
               status: "error",
-              msg: "服务器连接失败"
+              msg: i18n.t("downloadClient.serverConnectionFailed") //"服务器连接失败"
             })
           }
         }).catch((result) => {
@@ -102,74 +104,88 @@
         })
         return;
       }
-      // let path = [`${this.options.address}/webapi/DownloadStation/task.cgi?api=SYNO.DownloadStation.Task`,
-      //   `version=${this.version}`,
-      //   `method=create`,
-      //   `_sid=${this.sessionId}`,
-      //   `uri=` + encodeURIComponent(options.url),
-      //   `destination=` + encodeURIComponent(options.savePath)
-      // ];
-      // $.ajax({
-      //   url: path.join("&"),
-      //   timeout: PTBackgroundService.options.connectClientTimeout,
-      //   dataType: "json"
-      // }).done((result) => {
-      //   console.log(result)
-      //   callback(result)
-      // }).fail(() => {
-      //   callback({
-      //     status: "error",
-      //     msg: "服务器连接失败"
-      //   })
-      // })
 
-      PTBackgroundService.requestMessage({
-          action: "getTorrentDataFromURL",
-          data: options.url
-        })
-        .then((result) => {
-          let formData = new FormData();
-          formData.append("_sid", this.sessionId);
-          formData.append("api", "SYNO.DownloadStation.Task");
-          formData.append("version", this.version);
-          formData.append("method", "create");
+      let postData = {
+        api: 'SYNO.DownloadStation2.Task',
+        method: 'create',
+        version: 2,
+        create_list: false,
+        _sid: this.sessionId  // fxxk， _sid 参数不能放在第一位，不然会直接 101 报错
+      }
 
-          if (options.savePath) {
-            let savePath = options.savePath + "";
-            // 去除路径最后的 / ，以确保可以正常添加目录信息
-            if (savePath.substr(-1) == "/") {
-              savePath = savePath.substr(0, savePath.length - 1);
+      let headers = {
+        'X-SYNO-TOKEN': this.synoToken
+      }
+
+      // fxxk， 没有 destination 参数也会直接报错
+      let savePath = (options.savePath || "") + "";
+      if (savePath.substr(-1) === "/") {  // 去除路径最后的 / ，以确保可以正常添加目录信息
+        savePath = savePath.substr(0, savePath.length - 1);
+      }
+      postData.destination = `"${savePath || ''}"`;
+
+      if (options.url.startsWith('magnet:')) {
+        postData.type = '"url"';
+        postData.url = [options.url];
+
+        this.addTorrent(postData, options, callback);
+      } else {
+        postData.type = '"file"';
+        postData.file = ['torrent'];
+
+        let formData = new FormData();
+        Object.keys(postData).forEach((k) => {
+          let v = postData[k];
+          if (v !== undefined) {
+            if (Array.isArray(v)) {
+              v = JSON.stringify(v);
             }
-            formData.append("destination", savePath)
+            formData.append(k, v);
           }
-
-          formData.append("file", result, "file.torrent")
-
-          this.addTorrent(formData, options, callback);
-        })
-        .catch((result) => {
-          callback && callback(result);
         });
+
+
+        PTBackgroundService.requestMessage({
+          action: "getTorrentDataFromURL",
+          data: {
+            url: options.url,
+            parseTorrent: true
+          }
+        })
+          .then((result) => {
+            formData.append("torrent", result.content, `${result.torrent.name}.torrent`)
+
+            this.addTorrent(formData, headers, options, callback);
+          })
+          .catch((result) => {
+            callback && callback(result);
+          });
+
+      }
     }
 
-    addTorrent(formData, options, callback) {
+    addTorrent(formData, headers, options, callback) {
       $.ajax({
-        url: `${this.options.address}/webapi/DownloadStation/task.cgi`,
+        url: `${this.options.address}/webapi/entry.cgi`,
+        headers,
         timeout: PTBackgroundService.options.connectClientTimeout,
         type: "POST",
         processData: false,
         contentType: false,
-        method: "POST",
         data: formData,
         dataType: "json"
       }).done((result) => {
         console.log(result)
         if (result.error) {
           let errorMap = {
-            400: "文件上传失败",
-            401: "达到的最大任务数",
-            402: `指定的目录[${options.savePath}]不可用或无权限`,
-            403: `指定的目录[${options.savePath}]不存在`
+            400: i18n.t("downloadClient.fileUploadFailed"), // "文件上传失败",
+            401: i18n.t("downloadClient.maxNumberOfTasksReached"), //"达到的最大任务数",
+            402: i18n.t("downloadClient.destinationDenied", {
+              path: options.savePath
+            }), //`指定的目录[${options.savePath}]不可用或无权限`,
+            403: i18n.t("downloadClient.destinationDoesNotExist", {
+              path: options.savePath
+            }) //`指定的目录[${options.savePath}]不存在`
           };
           /**
            * 400 File upload failed
@@ -191,7 +207,7 @@
       }).fail(() => {
         callback({
           status: "error",
-          msg: "服务器连接失败"
+          msg: i18n.t("downloadClient.serverConnectionFailed") //"服务器连接失败"
         })
       })
     }

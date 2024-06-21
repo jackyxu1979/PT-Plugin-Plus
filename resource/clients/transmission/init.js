@@ -6,7 +6,7 @@
   class Transmission {
     /**
      * 初始化实例
-     * @param {*} options 
+     * @param {*} options
      * loginName: 登录名
      * loginPwd: 登录密码
      * url: 服务器地址
@@ -56,7 +56,7 @@
           case "addTorrentFromURL":
             this.addTorrentFromUrl(data.url, data.savePath, data.autoStart, (result) => {
               resolve(result);
-            });
+            }, data.upLoadLimit);
             break;
 
             // 获取可用空间
@@ -82,9 +82,9 @@
 
     /**
      * 调用指定的RPC
-     * @param {*} options 
-     * @param {*} callback 
-     * @param {*} tags 
+     * @param {*} options
+     * @param {*} callback
+     * @param {*} tags
      */
     exec(options, callback, tags) {
       return new Promise((resolve, reject) => {
@@ -111,11 +111,20 @@
           resolve(resultData);
         }, (request, event, page) => {
           switch (request.status) {
+            case 0:
+              result = {
+                status: "error",
+                code: request.status,
+                msg: i18n.t("downloadClient.serverIsUnavailable") //"服务器不可用或网络错误"
+              };
+              reject && reject(result)
+              break;
+
             case 401:
               result = {
                 status: "error",
                 code: request.status,
-                msg: "身份验证失败"
+                msg: i18n.t("downloadClient.permissionDenied") //"身份验证失败"
               };
               reject && reject(result)
               break;
@@ -124,7 +133,7 @@
               result = {
                 status: "error",
                 code: request.status,
-                msg: event || "未知错误"
+                msg: event || i18n.t("downloadClient.unknownError") //"未知错误"
               };
               reject && reject(result)
               break;
@@ -136,9 +145,9 @@
 
     /**
      * 发送请求
-     * @param {*} options 
-     * @param {*} success 
-     * @param {*} error 
+     * @param {*} options
+     * @param {*} success
+     * @param {*} error
      */
     sendRequest(options, success, error) {
       $.ajax(options).done((resultData, textStatus) => {
@@ -173,7 +182,7 @@
      * @param bool autoStart 是否自动开始
      * @param function callback 回调
      */
-    addTorrentFromUrl(url, savePath, autoStart, callback) {
+    addTorrentFromUrl(url, savePath, autoStart, callback, uploadLimit = 0) {
       var options = {
         method: "torrent-add",
         arguments: {
@@ -186,18 +195,13 @@
         options.arguments["download-dir"] = savePath;
       }
 
-      let magnet = "";
-
-      // 磁性连接（代码来自原版WEBUI）
-      if (url.match(/^[0-9a-f]{40}$/i)) {
-        magnet = 'magnet:?xt=urn:btih:' + url;
-      } else if (/^magnet:\?xt=urn:btih:/.test(url)) {
-        magnet = url;
+      if (uploadLimit && uploadLimit > 0) {
+        options.arguments["uploadLimit"] = uploadLimit;
       }
 
-      // 是否为磁性连接
-      if (magnet) {
-        options.arguments["filename"] = magnet;
+      // 磁性连接
+      if (url.startsWith('magnet:')) {
+        options.arguments["filename"] = url;
         this.addTorrent(options, callback)
       } else {
         PTBackgroundService.requestMessage({
@@ -231,8 +235,8 @@
 
     /**
      * 添加种子
-     * @param {*} options 
-     * @param {*} callback 
+     * @param {*} options
+     * @param {*} callback
      */
     addTorrent(options, callback) {
       this.exec(options).then((data) => {
